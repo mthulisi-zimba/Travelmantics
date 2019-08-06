@@ -1,5 +1,6 @@
 package com.example.travelmantics.activities;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -7,6 +8,7 @@ import android.content.Intent;
 import android.content.res.Resources;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -14,11 +16,14 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.example.travelmantics.R;
 import com.example.travelmantics.models.TravelDeal;
 import com.example.travelmantics.utilities.FirebaseUtil;
+import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.database.DatabaseReference;
@@ -38,6 +43,8 @@ public class DealActivity extends AppCompatActivity {
     TravelDeal deal;
     Button btnImage;
     ImageView imageView;
+    ProgressBar progressBar;
+    TextView tvLoadingImage;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,6 +60,8 @@ public class DealActivity extends AppCompatActivity {
         txtDescription = findViewById(R.id.txtDescription);
         txtPrice = findViewById(R.id.txtPrice);
         imageView = findViewById(R.id.image);
+        progressBar = findViewById(R.id.progressBar);
+        tvLoadingImage = findViewById(R.id.tvLoadingImage);
 
         Intent intent = getIntent();
         TravelDeal deal = (TravelDeal) intent.getSerializableExtra("Deal");
@@ -89,11 +98,13 @@ public class DealActivity extends AppCompatActivity {
             menu.findItem(R.id.delete_menu).setVisible(true);
             menu.findItem(R.id.save_menu).setVisible(true);
             enableEditTexts(true);
+            findViewById(R.id.btnImage).setEnabled(true);
 
         }else{
             menu.findItem(R.id.delete_menu).setVisible(false);
             menu.findItem(R.id.save_menu).setVisible(false);
             enableEditTexts(false);
+            findViewById(R.id.btnImage).setEnabled(false);
 
         }
         return true;
@@ -145,11 +156,26 @@ public class DealActivity extends AppCompatActivity {
             return;
         }
         mDatabaseReference.child(deal.getId()).removeValue();
+        if(deal.getImageName()!= null && !deal.getImageName().isEmpty()){
+            StorageReference picRef = FirebaseUtil.mStorage.getReference().child(deal.getImageName());
+            picRef.delete().addOnSuccessListener(new OnSuccessListener<Void>() {
+                @Override
+                public void onSuccess(Void aVoid) {
+                    Log.d("Delete image","Image Deleted Succesully");
+                }
+            }).addOnFailureListener(new OnFailureListener() {
+                @Override
+                public void onFailure(@NonNull Exception e) {
+                    Log.d("Delete image",e.getMessage());
+                }
+            });
+        }
     }
 
     public void backToList(){
-        Intent intent = new Intent(this,ListActivity.class);
-        startActivity(intent);
+        //Intent intent = new Intent(this,ListActivity.class);
+        //startActivity(intent);
+        onBackPressed();
     }
 
     public void enableEditTexts(boolean isEnabled){
@@ -161,6 +187,8 @@ public class DealActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        progressBar.setVisibility(View.VISIBLE);
+        tvLoadingImage.setVisibility(View.VISIBLE);
 
         if(requestCode == PICTURE_RESULT && resultCode == RESULT_OK){
             Uri imageUri = data.getData();
@@ -168,16 +196,20 @@ public class DealActivity extends AppCompatActivity {
             ref.putFile(imageUri).addOnSuccessListener(this, new OnSuccessListener<UploadTask.TaskSnapshot>() {
                 @Override
                 public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
+                    String pictureName = taskSnapshot.getMetadata().getReference().getPath();
+                    deal.setImageName(pictureName);
                     taskSnapshot.getMetadata().getReference().getDownloadUrl().addOnSuccessListener(new OnSuccessListener<Uri>() {
                         @Override
                         public void onSuccess(Uri uri) {
                             Uri downloadUrl = uri;
                             deal.setImageUrl(downloadUrl.toString());
                             showImage(downloadUrl.toString());
-                            saveDeal();
-                            Toast.makeText(DealActivity.this,"Deal Saved",Toast.LENGTH_LONG).show();
-                            clean();
-                            backToList();
+                            progressBar.setVisibility(View.GONE);
+                            tvLoadingImage.setVisibility(View.GONE);
+                            //saveDeal();
+                            //Toast.makeText(DealActivity.this,"Deal Saved",Toast.LENGTH_LONG).show();
+                            //clean();
+                            //backToList();
                         }
                     });
                 }
